@@ -2,9 +2,9 @@
 
 ```bash
 $ raptorq_simulation -h
-nsim 0.1.0
+raptorq_simulation 0.1.0
 
-UDP network simulation using RaptorQ for erasure chunks
+UDP network simulation using RaptorQ Coding for erasure chunks to deal with packet loss
 
 USAGE:
     raptorq_simulation [OPTIONS]
