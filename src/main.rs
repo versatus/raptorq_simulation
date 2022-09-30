@@ -6,7 +6,7 @@ use anyhow::Result;
 use clap::Parser;
 use crossbeam_channel::{unbounded, Receiver};
 //use futures::executor::ThreadPool;
-use crate::utils::{file_writer, generate_46b_batch_id, read_file, reassemble_packets, MTU_SIZE};
+use crate::utils::{file_writer, generate_46b_batch_id, read_file, reassemble_and_send_packets, MTU_SIZE};
 use futures::future::try_join_all;
 use futures::prelude::*;
 use raptorq::Decoder;
@@ -182,7 +182,7 @@ async fn process_received_packets(receivers: Vec<NodeAddress>, port: u16) -> io:
         let f_send = file_creator_send_channel.clone();
 
         move || {
-            reassemble_packets(
+            reassemble_and_send_packets(
                 reassembler_channel_receive,
                 &mut batch_id_store,
                 &mut decoder_hash,
