@@ -184,7 +184,7 @@ pub fn file_writer(file_recv: Receiver<(String, Vec<u8>)>) {
 /// received and the decoder as the value.
 /// * `forwarder`: Sender<Vec<u8>>
 /// * `file_send`: Sender<(String, Vec<u8>)>
-pub fn reassemble_packets(
+pub fn reassemble_and_send_packets(
     receiver: Receiver<([u8; 1280], usize)>,
     batch_id_hashset: &mut HashSet<[u8; BATCH_ID_SIZE]>,
     decoder_hash: &mut HashMap<[u8; BATCH_ID_SIZE], (usize, Decoder)>,
@@ -213,6 +213,8 @@ pub fn reassemble_packets(
             let _ = forwarder.try_send(received_packet.0[0..received_packet.1].to_vec());
         }
 
+        //initial Match generates new decoder value if none
+        //second match fails if decoder is not found
         match decoder_hash.get_mut(&batch_id) {
             Some((num_packets, decoder)) => {
                 *num_packets += 1;
@@ -238,6 +240,9 @@ pub fn reassemble_packets(
             }
             None => {
                 // This is creating a new decoder for a new batch.
+                //generate new batch ID and decoder
+                let batch_id = generate_46b_batch_id();
+                //let transfer_length = 7038895;
                 decoder_hash.insert(
                     batch_id,
                     (
@@ -245,7 +250,54 @@ pub fn reassemble_packets(
                         Decoder::new(ObjectTransmissionInformation::new(7038895, 1176, 1, 1, 8)),
                     ),
                 );
+
+                /*
+                Transfer Length (F): 40-bit unsigned integer.  A non-negative
+                integer that is at most 946270874880.  This is the transfer length
+                of the object in units of octets.
+
+                Symbol Size (T): 16-bit unsigned integer.  A positive integer that
+                is less than 2^^16.  This is the size of a symbol in units of
+                octets. 
+                */
+
+                match decoder_hash.get_mut(&batch_id) {
+                    Some((num_packets, decoder)) => {
+                    *num_packets += 1;
+                    // Decoding the packet.
+                    let result = decoder.decode(EncodingPacket::deserialize(
+                        &received_packet.0[48_usize..received_packet.1].to_vec(),
+                    ));
+                    if !result.is_none() {
+                        batch_id_hashset.insert(batch_id);
+
+                        println!(
+                            "Batch: {}: Generating reassembled file: {:?}: Number of packets received: {}",
+                            str::from_utf8(&batch_id).unwrap(),
+                            SystemTime::now().duration_since(UNIX_EPOCH).unwrap(), *num_packets
+                        );
+                        // This is the part of the code that is sending the reassembled file to the `file_send` channel.
+                        let result_bytes = result.unwrap();
+                        let batch_id_str = String::from(str::from_utf8(&batch_id).unwrap());
+                        let msg = (batch_id_str, result_bytes);
+                        let _ = file_send.send(msg);
+                        decoder_hash.remove(&batch_id);
+                    }
+                }
+                    None => {
+                        println!("Error: Decoder not found");
+                    }
+                }
             }
         }
     }
-}
+}   /* 
+    Yes in raptor Q
+10:54
+As I said we need to propogafe encoder information
+10:54
+To peera so that decoder could know*/
+
+
+ 
+
